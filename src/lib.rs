@@ -109,6 +109,32 @@ where
             })
         }
     }
+    /// Gets the given keys' corresponding entries in the cache for in-place manipulation.
+    ///
+    /// This is mostly useful if you want to modify multiple entries at once. For instance, because you can use a single IO call to update all those entries instead of having a call for each entry.
+    ///
+    /// Examples
+    /// ```
+    /// use cache_cache::Cache;
+    /// use std::{error::Error, time::Duration};
+    ///
+    /// fn get_position(ids: &[u8]) -> Result<Vec<f64>, Box<dyn Error>> {
+    ///     // For simplicity, this function always work.
+    ///     // But it's a mockup for a real world scenario where hardware IO can fail.
+    ///     Ok(ids.iter().map(|&id| id as f64 * 10.0).collect())
+    /// }
+    ///
+    /// let mut present_position = Cache::with_expiry_duration(Duration::from_millis(10));
+    ///
+    /// present_position.insert(10, 0.0);
+    ///
+    /// let pos = present_position
+    ///     .entries(&[10, 11, 12])
+    ///     .or_try_insert_with(get_position);
+    ///
+    /// assert!(pos.is_ok());
+    /// assert_eq!(pos.unwrap(), vec![&0.0, &110.0, &120.0]);
+    /// ```
     pub fn entries<'a>(&'a mut self, keys: &'a [K]) -> Entries<'_, K, V> {
         Entries { keys, cache: self }
     }
@@ -386,20 +412,68 @@ where
     /// Examples
     /// ```
     /// use cache_cache::Cache;
+    /// use std::{error::Error, time::Duration};
     ///
-    /// let mut torque_enable: Cache<u8, bool> = Cache::keep_last();
+    /// let mut present_position = Cache::with_expiry_duration(Duration::from_millis(10));
     ///
-    /// torque_enable.entries(&[20, 21, 22]).or_insert_with(|| false);
-    /// assert_eq!(torque_enable[&20], false);
-    /// assert_eq!(torque_enable[&21], false);
-    /// assert_eq!(torque_enable[&22], false);
+    /// present_position.insert(10, 0.0);
+    ///
+    /// let pos = present_position
+    ///     .entries(&[10, 11, 12])
+    ///     .or_insert_with(|ids| ids.iter().map(|&id| id as f64 * 10.0).collect());
+    ///
+    /// assert_eq!(pos, vec![&0.0, &110.0, &120.0]);
     /// ```
-    pub fn or_insert_with<F: FnOnce() -> V + Copy>(self, default: F) -> Vec<&'a V> {
-        for &k in self.keys {
-            self.cache.entry(k).or_insert_with(default);
+    pub fn or_insert_with<F: FnOnce(&[K]) -> Vec<V>>(self, default: F) -> Vec<&'a V> {
+        self.or_try_insert_with(|missing| Ok(default(missing)))
+            .unwrap()
+    }
+    /// Tries inserting a value in the entries (if empty) with the default function and returns a [Result] of the  reference to the value in the entries or the error encounter by the default function.
+    ///
+    /// Examples
+    /// ```
+    /// use cache_cache::Cache;
+    /// use std::{error::Error, time::Duration};
+    ///
+    /// fn get_position(ids: &[u8]) -> Result<Vec<f64>, Box<dyn Error>> {
+    ///     // For simplicity, this function always work.
+    ///     // But it's a mockup for a real world scenario where hardware IO can fail.
+    ///     Ok(ids.iter().map(|&id| id as f64 * 10.0).collect())
+    /// }
+    ///
+    /// let mut present_position = Cache::with_expiry_duration(Duration::from_millis(10));
+    ///
+    /// present_position.insert(10, 0.0);
+    ///
+    /// let pos = present_position
+    ///     .entries(&[10, 11, 12])
+    ///     .or_try_insert_with(get_position);
+    ///
+    /// assert!(pos.is_ok());
+    /// assert_eq!(pos.unwrap(), vec![&0.0, &110.0, &120.0]);
+    /// ```
+    pub fn or_try_insert_with<F: FnOnce(&[K]) -> Result<Vec<V>, Box<dyn Error>>>(
+        self,
+        default: F,
+    ) -> Result<Vec<&'a V>, Box<dyn Error>> {
+        let missing: Vec<K> = self
+            .keys
+            .iter()
+            .filter(|k| self.cache.get(k).is_none())
+            .copied()
+            .collect();
+
+        if !missing.is_empty() {
+            let values = default(&missing)?;
+
+            assert_eq!(missing.len(), values.len());
+
+            for (k, v) in missing.iter().zip(values) {
+                self.cache.insert(*k, v);
+            }
         }
 
-        self.get_values_unchecked()
+        Ok(self.get_values_unchecked())
     }
 
     fn get_values_unchecked(self) -> Vec<&'a V> {
