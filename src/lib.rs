@@ -160,6 +160,11 @@ where
 {
     type Output = V;
 
+    /// Returns a reference to the value corresponding to the supplied key.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the key is not present in the `Cache`.
     fn index(&self, index: &Q) -> &Self::Output {
         self.get(index).expect("no entry found for key")
     }
