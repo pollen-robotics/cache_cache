@@ -109,6 +109,10 @@ where
             })
         }
     }
+    pub fn entries<'a>(&'a mut self, keys: &'a [K]) -> Entries<'_, K, V> {
+        Entries { keys, cache: self }
+    }
+
     fn has_expired(expiry_duration: Option<Duration>, t: &SystemTime) -> bool {
         match expiry_duration {
             Some(expiry) => t.elapsed().unwrap() > expiry,
@@ -343,5 +347,45 @@ where
     fn insert(self, v: V) -> &'a mut V {
         self.cache.insert(self.k.clone(), v);
         self.cache.get_mut(&self.k).unwrap()
+    }
+}
+
+/// A view into multiple [Entry] in a cache.
+pub struct Entries<'a, K: 'a, V: 'a> {
+    keys: &'a [K],
+    cache: &'a mut Cache<K, V>,
+}
+impl<'a, K, V> Entries<'a, K, V>
+where
+    K: Hash + Eq + Copy,
+    V: Clone,
+{
+    /// Ensures a value is in the entries by inserting the default if empty, and returns a reference to the value in the entries.
+    ///
+    /// Examples
+    /// ```
+    /// use cache_cache::Cache;
+    ///
+    /// let mut target_positions = Cache::keep_last();
+    ///
+    /// target_positions.insert(11, 90);
+    ///
+    /// target_positions.entries(&[10, 11, 12]).or_insert(0);
+    /// assert_eq!(target_positions[&10], 0);
+    /// assert_eq!(target_positions[&11], 90);
+    /// assert_eq!(target_positions[&12], 0);
+    pub fn or_insert(self, default: V) -> Vec<&'a V> {
+        for &k in self.keys {
+            self.cache.entry(k).or_insert(default.clone());
+        }
+
+        self.get_values_unchecked()
+    }
+
+    fn get_values_unchecked(self) -> Vec<&'a V> {
+        self.keys
+            .iter()
+            .map(|k| self.cache.get(k).unwrap())
+            .collect()
     }
 }
