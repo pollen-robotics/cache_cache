@@ -176,11 +176,20 @@ where
     ///
     /// If the cache did not have this key present, None is returned.
     /// If the cache did have this key present, the value is updated, and the old value (expired or not) is returned.
+    ///
+    /// Examples
+    /// ```
+    /// use cache_cache::Cache;
+    ///
+    /// let mut cache = Cache::keep_last();
+    /// assert_eq!(cache.insert(10, "a"), None);
+    /// assert_eq!(cache.insert(10, "b"), Some("a"));
+    /// assert_eq!(cache[&10], "b");
+    /// ```
     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         self.hash_map.insert(k, (v, SystemTime::now())).map(|v| v.0)
     }
 }
-
 
 impl<K, Q: ?Sized, V> Index<&Q> for Cache<K, V>
 where
@@ -199,8 +208,13 @@ where
     }
 }
 
+/// A view into a single entry in a cache, which may either be vacant or occupied.
+///
+/// This enum is constructed from the entry method on [Cache].
 pub enum Entry<'a, K: 'a, V: 'a> {
+    /// An occupied entry.
     Occupied(OccupiedEntry<'a, K, V>),
+    /// A vacant entry.
     Vacant(VacantEntry<'a, K, V>),
 }
 
@@ -245,11 +259,13 @@ where
     }
 }
 
+/// A view into an occupied entry in a [Cache]. It is part of the [Entry] enum.
 pub struct OccupiedEntry<'a, K: 'a, V: 'a> {
     k: K,
     v: &'a mut V,
 }
 
+/// A view into a vacant entry in a [Cache]. It is part of the [Entry] enum.
 pub struct VacantEntry<'a, K, V> {
     k: K,
     cache: &'a mut Cache<K, V>,
