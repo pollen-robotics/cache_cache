@@ -381,6 +381,26 @@ where
 
         self.get_values_unchecked()
     }
+    /// Ensures a value is in the entries by inserting the result of the default function if empty, and returns a reference to the value in the entries.
+    ///
+    /// Examples
+    /// ```
+    /// use cache_cache::Cache;
+    ///
+    /// let mut torque_enable: Cache<u8, bool> = Cache::keep_last();
+    ///
+    /// torque_enable.entries(&[20, 21, 22]).or_insert_with(|| false);
+    /// assert_eq!(torque_enable[&20], false);
+    /// assert_eq!(torque_enable[&21], false);
+    /// assert_eq!(torque_enable[&22], false);
+    /// ```
+    pub fn or_insert_with<F: FnOnce() -> V + Copy>(self, default: F) -> Vec<&'a V> {
+        for &k in self.keys {
+            self.cache.entry(k).or_insert_with(default);
+        }
+
+        self.get_values_unchecked()
+    }
 
     fn get_values_unchecked(self) -> Vec<&'a V> {
         self.keys
