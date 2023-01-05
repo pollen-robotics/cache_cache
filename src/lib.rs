@@ -79,6 +79,34 @@ where
         }
     }
 
+    /// Gets the given key’s corresponding entry in the cache for in-place manipulation.
+    ///
+    /// Examples
+    /// ```
+    /// use cache_cache::Cache;
+    /// use std::time::Duration;
+    ///
+    /// let mut motors_temperature = Cache::with_expiry_duration(Duration::from_millis(100));
+    ///
+    /// fn get_motor_temperature(motor_id: u8) -> f64 {
+    ///     // Should actually retrieve the real value from the motor
+    ///     42.0
+    /// }
+    ///
+    /// let motor_id = 11;
+    /// let temp = motors_temperature.entry(motor_id).or_insert_with(|| get_motor_temperature(motor_id));
+    /// assert_eq!(motors_temperature.get(&motor_id), Some(&42.0));
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
+        if self.get(&key).is_some() {
+            let v = self.get_mut(&key).unwrap();
+            Entry::Occupied(OccupiedEntry { k: key, v })
+        } else {
+            Entry::Vacant(VacantEntry {
+                k: key,
+                cache: self,
+            })
+        }
+    }
     /// Returns a reference to the value corresponding to the key if it has not expired.
     ///
     /// # Examples
@@ -115,5 +143,71 @@ where
     /// If the cache did have this key present, the value is updated, and the old value (expired or not) is returned.
     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         self.hash_map.insert(k, (v, SystemTime::now())).map(|v| v.0)
+    }
+}
+
+pub enum Entry<'a, K: 'a, V: 'a> {
+    Occupied(OccupiedEntry<'a, K, V>),
+    Vacant(VacantEntry<'a, K, V>),
+}
+
+impl<'a, K, V> Entry<'a, K, V>
+where
+    K: Hash + Eq + Clone,
+{
+    /// Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.
+    ///
+    /// Examples
+    /// ```
+    /// use cache_cache::Cache;
+    ///
+    /// let mut target_positions = Cache::keep_last();
+    ///
+    /// target_positions.entry(10).or_insert(0);
+    /// assert_eq!(target_positions[&10], 0);
+    ///
+    /// *target_positions.entry(10).or_insert(10) += 20;
+    /// assert_eq!(target_positions[&10], 20);
+    pub fn or_insert(self, default: V) -> &'a mut V {
+        match self {
+            Entry::Occupied(entry) => entry.v,
+            Entry::Vacant(entry) => entry.insert(default),
+        }
+    }
+
+    /// Returns a reference to this entry’s key.
+    ///
+    /// Examples
+    /// ```
+    /// use cache_cache::Cache;
+    ///
+    /// let mut cache: Cache<&str, u32> = Cache::keep_last();
+    /// assert_eq!(cache.entry("speed").key(), &"speed");
+    /// ```
+    pub fn key(&self) -> &K {
+        match self {
+            Entry::Occupied(entry) => &entry.k,
+            Entry::Vacant(entry) => &entry.k,
+        }
+    }
+}
+
+pub struct OccupiedEntry<'a, K: 'a, V: 'a> {
+    k: K,
+    v: &'a mut V,
+}
+
+pub struct VacantEntry<'a, K, V> {
+    k: K,
+    cache: &'a mut Cache<K, V>,
+}
+
+impl<'a, K, V> VacantEntry<'a, K, V>
+where
+    K: Hash + Eq + Clone,
+{
+    fn insert(self, v: V) -> &'a mut V {
+        self.cache.insert(self.k.clone(), v);
+        self.cache.get_mut(&self.k).unwrap()
     }
 }
