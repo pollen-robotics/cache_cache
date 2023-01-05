@@ -9,6 +9,7 @@
 use std::{
     borrow::Borrow,
     collections::HashMap,
+    error::Error,
     hash::Hash,
     ops::Index,
     time::{Duration, SystemTime},
@@ -250,6 +251,59 @@ where
         match self {
             Entry::Occupied(entry) => entry.v,
             Entry::Vacant(entry) => entry.insert(default()),
+        }
+    }
+    /// Tries inserting a value in the entry (if empty) with the default function and returns a [Result] of the mutable reference to the value in the entry or the error encounter by the default function.
+    ///
+    /// Examples
+    /// ```
+    /// use cache_cache::Cache;
+    /// use std::{error::Error, fmt};
+    ///
+    /// #[derive(Debug)]
+    /// struct MyDummyIOError;
+    /// impl fmt::Display for MyDummyIOError {
+    ///     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    ///          write!(f, "my io error")
+    ///     }
+    /// }
+    /// impl Error for MyDummyIOError {}
+    ///
+    /// fn enable_torque(id: u8) -> Result<bool, Box<dyn Error>> {
+    ///     // Send hardware command that could fail, something like
+    ///     // serial_send_torque_on_command(...)?;
+    ///
+    ///     // For example purposes, we suppose here that our method:
+    ///     // * will work for id within 0...10
+    ///     // * fail for other
+    ///     if id > 10 {
+    ///         Err(Box::new(MyDummyIOError))
+    ///     }
+    ///     else {
+    ///         Ok(true)
+    ///     }
+    /// }
+    ///
+    /// let mut torque_enable = Cache::keep_last();
+    ///
+    /// let res = torque_enable.entry(5).or_try_insert_with(|| enable_torque(5));
+    /// assert!(res.is_ok());
+    /// assert_eq!(*res.unwrap(), true);
+    ///
+    /// let res = torque_enable.entry(20).or_try_insert_with(|| enable_torque(20));
+    /// assert!(res.is_err());
+
+    /// ```
+    pub fn or_try_insert_with<F: FnOnce() -> Result<V, Box<dyn Error>>>(
+        self,
+        default: F,
+    ) -> Result<&'a mut V, Box<dyn Error>> {
+        match self {
+            Entry::Occupied(entry) => Ok(entry.v),
+            Entry::Vacant(entry) => match default() {
+                Ok(v) => Ok(entry.insert(v)),
+                Err(e) => Err(e),
+            },
         }
     }
 
