@@ -13,6 +13,32 @@ Many other caching implementations exist than can better fit other need.
 
 ## Documentation
 
+### Example
+
+```rust
+use cache_cache::Cache;
+use std::{error::Error, time::Duration};
+
+fn get_position(ids: &[u8]) -> Result<Vec<f64>, Box<dyn Error>> {
+    // For simplicity, this function always work.
+    // But it's a mockup for a real world scenario where hardware IO can fail.
+    Ok(ids.iter().map(|&id| id as f64 * 10.0).collect())
+}
+
+fn main() {
+    let mut present_position = Cache::with_expiry_duration(Duration::from_millis(10));
+
+    present_position.insert(10, 0.0);
+
+    let pos = present_position
+        .entries(&[10, 11, 12])
+        .or_try_insert_with(get_position);
+
+    assert!(pos.is_ok());
+    assert_eq!(pos.unwrap(), vec![&0.0, &110.0, &120.0]);
+}
+```
+
 See https://docs.rs/cache_cache for more information on APIs and examples.
 
 ## License
