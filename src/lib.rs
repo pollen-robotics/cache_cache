@@ -90,14 +90,13 @@ where
     ///
     /// let mut motors_temperature = Cache::with_expiry_duration(Duration::from_millis(100));
     ///
-    /// fn get_motor_temperature(motor_id: u8) -> f64 {
+    /// fn get_motor_temperature(motor_id: &u8) -> f64 {
     ///     // Should actually retrieve the real value from the motor
     ///     42.0
     /// }
     ///
-    /// let motor_id = 11;
-    /// let temp = motors_temperature.entry(motor_id).or_insert_with(|| get_motor_temperature(motor_id));
-    /// assert_eq!(motors_temperature.get(&motor_id), Some(&42.0));
+    /// let temp = motors_temperature.entry(11).or_insert_with(get_motor_temperature);
+    /// assert_eq!(motors_temperature.get(&11), Some(&42.0));
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
         if self.get(&key).is_some() {
             let v = self.get_mut(&key).unwrap();
@@ -245,7 +244,7 @@ pub enum Entry<'a, K: 'a, V: 'a> {
 
 impl<'a, K, V> Entry<'a, K, V>
 where
-    K: Hash + Eq + Clone,
+    K: Hash + Eq + Copy,
 {
     /// Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.
     ///
@@ -268,19 +267,23 @@ where
     }
     /// Ensures a value is in the entry by inserting the result of the default function if empty, and returns a mutable reference to the value in the entry.
     ///
+    /// In contrary to [HashMap] API, the default function takes the key as argument. As shown in the example, it makes the IO call simpler. It does require the key to implement the Copy trait though.
+    ///
     /// Examples
     /// ```
     /// use cache_cache::Cache;
     ///
     /// let mut torque_enable: Cache<u8, bool> = Cache::keep_last();
     ///
-    /// torque_enable.entry(20).or_insert_with(|| false);
+    /// torque_enable.entry(20).or_insert_with(|id| false);
     /// assert_eq!(torque_enable[&20], false);
     /// ```
-    pub fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &'a mut V {
+    pub fn or_insert_with<F: FnOnce(&K) -> V>(self, default: F) -> &'a mut V {
+        let k = *self.key();
+
         match self {
             Entry::Occupied(entry) => entry.v,
-            Entry::Vacant(entry) => entry.insert(default()),
+            Entry::Vacant(entry) => entry.insert(default(&k)),
         }
     }
     /// Tries inserting a value in the entry (if empty) with the default function and returns a [Result] of the mutable reference to the value in the entry or the error encounter by the default function.
@@ -299,14 +302,14 @@ where
     /// }
     /// impl Error for MyDummyIOError {}
     ///
-    /// fn enable_torque(id: u8) -> Result<bool, Box<dyn Error>> {
+    /// fn enable_torque(id: &u8) -> Result<bool, Box<dyn Error>> {
     ///     // Send hardware command that could fail, something like
     ///     // serial_send_torque_on_command(...)?;
     ///
     ///     // For example purposes, we suppose here that our method:
     ///     // * will work for id within 0...10
     ///     // * fail for other
-    ///     if id > 10 {
+    ///     if *id > 10 {
     ///         Err(Box::new(MyDummyIOError))
     ///     }
     ///     else {
@@ -316,21 +319,23 @@ where
     ///
     /// let mut torque_enable = Cache::keep_last();
     ///
-    /// let res = torque_enable.entry(5).or_try_insert_with(|| enable_torque(5));
+    /// let res = torque_enable.entry(5).or_try_insert_with(enable_torque);
     /// assert!(res.is_ok());
     /// assert_eq!(*res.unwrap(), true);
     ///
-    /// let res = torque_enable.entry(20).or_try_insert_with(|| enable_torque(20));
+    /// let res = torque_enable.entry(20).or_try_insert_with(enable_torque);
     /// assert!(res.is_err());
 
     /// ```
-    pub fn or_try_insert_with<F: FnOnce() -> Result<V, Box<dyn Error>>>(
+    pub fn or_try_insert_with<F: FnOnce(&K) -> Result<V, Box<dyn Error>>>(
         self,
         default: F,
     ) -> Result<&'a mut V, Box<dyn Error>> {
+        let k = *self.key();
+
         match self {
             Entry::Occupied(entry) => Ok(entry.v),
-            Entry::Vacant(entry) => match default() {
+            Entry::Vacant(entry) => match default(&k) {
                 Ok(v) => Ok(entry.insert(v)),
                 Err(e) => Err(e),
             },
@@ -408,6 +413,8 @@ where
         self.get_values_unchecked()
     }
     /// Ensures a value is in the entries by inserting the result of the default function if empty, and returns a reference to the value in the entries.
+    ///
+    /// In contrary to [HashMap] API, the default function takes the missing keys as argument. As shown in the example, it makes the IO call simpler. It does require the key to implement the Copy trait though.
     ///
     /// Examples
     /// ```
