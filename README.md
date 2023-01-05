@@ -11,6 +11,10 @@ Typically, its primary use was to retrieve position/speed/temperature/etc from m
 
 Many other caching implementations exist than can better fit other need.
 
+## Documentation
+
+See https://docs.rs/cache_cache for more information on APIs and examples.
+
 ## License
 
 This library is licensed under the Apache License 2.0.
