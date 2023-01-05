@@ -241,6 +241,23 @@ where
             Entry::Vacant(entry) => entry.insert(default),
         }
     }
+    /// Ensures a value is in the entry by inserting the result of the default function if empty, and returns a mutable reference to the value in the entry.
+    ///
+    /// Examples
+    /// ```
+    /// use cache_cache::Cache;
+    ///
+    /// let mut torque_enable: Cache<u8, bool> = Cache::keep_last();
+    ///
+    /// torque_enable.entry(20).or_insert_with(|| false);
+    /// assert_eq!(torque_enable[&20], false);
+    /// ```
+    pub fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &'a mut V {
+        match self {
+            Entry::Occupied(entry) => entry.v,
+            Entry::Vacant(entry) => entry.insert(default()),
+        }
+    }
 
     /// Returns a reference to this entry’s key.
     ///
