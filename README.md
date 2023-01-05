@@ -1,4 +1,4 @@
-# Cache implementation with a focus on expiry duration and reducing IO calls
+# Cache for controlling and reducing IO calls
 
 ## Overview 
 
