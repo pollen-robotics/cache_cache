@@ -108,6 +108,12 @@ where
             })
         }
     }
+    fn has_expired(expiry_duration: Option<Duration>, t: &SystemTime) -> bool {
+        match expiry_duration {
+            Some(expiry) => t.elapsed().unwrap() > expiry,
+            None => false,
+        }
+    }
     /// Returns a reference to the value corresponding to the key if it has not expired.
     ///
     /// # Examples
@@ -125,15 +131,9 @@ where
         Q: Hash + Eq,
     {
         match self.hash_map.get(k) {
-            Some((v, t)) => match self.expiry_duration {
-                Some(expiry) => {
-                    if t.elapsed().unwrap() < expiry {
-                        Some(v)
-                    } else {
-                        None
-                    }
-                }
-                None => Some(v),
+            Some((v, t)) => match Self::has_expired(self.expiry_duration, t) {
+                true => None,
+                false => Some(v),
             },
             None => None,
         }
@@ -159,15 +159,9 @@ where
         Q: Hash + Eq,
     {
         match self.hash_map.get_mut(k) {
-            Some((v, t)) => match self.expiry_duration {
-                Some(expiry) => {
-                    if t.elapsed().unwrap() < expiry {
-                        Some(v)
-                    } else {
-                        None
-                    }
-                }
-                None => Some(v),
+            Some((v, t)) => match Self::has_expired(self.expiry_duration, t) {
+                true => None,
+                false => Some(v),
             },
             None => None,
         }
