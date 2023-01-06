@@ -47,6 +47,7 @@ pub struct Cache<K, V> {
 impl<K, V> Cache<K, V>
 where
     K: Hash + Eq,
+    V: Clone + Copy,
 {
     /// Creates an empty Cache where the last inserted value is kept.
     ///
@@ -98,14 +99,12 @@ where
     /// let temp = motors_temperature.entry(11).or_insert_with(get_motor_temperature);
     /// assert_eq!(motors_temperature.get(&11), Some(&42.0));
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
-        if self.get(&key).is_some() {
-            let v = self.get_mut(&key).unwrap();
-            Entry::Occupied(OccupiedEntry { k: key, v })
-        } else {
-            Entry::Vacant(VacantEntry {
+        match self.get(&key) {
+            Some(&v) => Entry::Occupied(OccupiedEntry { k: key, v }),
+            None => Entry::Vacant(VacantEntry {
                 k: key,
                 cache: self,
-            })
+            }),
         }
     }
     /// Gets the given keys' corresponding entries in the cache for in-place manipulation.
@@ -168,34 +167,6 @@ where
             None => None,
         }
     }
-    /// Returns a mutable reference to the value corresponding to the key if it has not expired.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use cache_cache::Cache;
-    ///
-    /// let mut cache: Cache<&str, f64> = Cache::keep_last();
-    /// cache.insert("target_position", 90.0);
-    ///
-    /// if let Some(pos) = cache.get_mut("target_position") {
-    ///     *pos += 10.0;
-    /// }
-    /// assert_eq!(cache.get(&"target_position"), Some(&100.0));
-    /// ```
-    pub fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        match self.hash_map.get_mut(k) {
-            Some((v, t)) => match Self::has_expired(self.expiry_duration, t) {
-                true => None,
-                false => Some(v),
-            },
-            None => None,
-        }
-    }
     /// Inserts a key-value pair into the cache.
     ///
     /// If the cache did not have this key present, None is returned.
@@ -219,6 +190,7 @@ impl<K, Q: ?Sized, V> Index<&Q> for Cache<K, V>
 where
     K: Eq + Hash + Borrow<Q>,
     Q: Eq + Hash,
+    V: Clone + Copy,
 {
     type Output = V;
 
@@ -237,7 +209,7 @@ where
 /// This enum is constructed from the entry method on [Cache].
 pub enum Entry<'a, K: 'a, V: 'a> {
     /// An occupied entry.
-    Occupied(OccupiedEntry<'a, K, V>),
+    Occupied(OccupiedEntry<K, V>),
     /// A vacant entry.
     Vacant(VacantEntry<'a, K, V>),
 }
@@ -245,8 +217,9 @@ pub enum Entry<'a, K: 'a, V: 'a> {
 impl<'a, K, V> Entry<'a, K, V>
 where
     K: Hash + Eq + Copy,
+    V: Clone + Copy,
 {
-    /// Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.
+    /// Ensures a value is in the entry by inserting the default if empty, and returns a copy of the value in the entry.
     ///
     /// Examples
     /// ```
@@ -256,16 +229,13 @@ where
     ///
     /// target_positions.entry(10).or_insert(0);
     /// assert_eq!(target_positions[&10], 0);
-    ///
-    /// *target_positions.entry(10).or_insert(10) += 20;
-    /// assert_eq!(target_positions[&10], 20);
-    pub fn or_insert(self, default: V) -> &'a mut V {
+    pub fn or_insert(self, default: V) -> V {
         match self {
             Entry::Occupied(entry) => entry.v,
             Entry::Vacant(entry) => entry.insert(default),
         }
     }
-    /// Ensures a value is in the entry by inserting the result of the default function if empty, and returns a mutable reference to the value in the entry.
+    /// Ensures a value is in the entry by inserting the result of the default function if empty, and returns a copy of the value in the entry.
     ///
     /// In contrary to [HashMap] API, the default function takes the key as argument. As shown in the example, it makes the IO call simpler. It does require the key to implement the Copy trait though.
     ///
@@ -278,7 +248,7 @@ where
     /// torque_enable.entry(20).or_insert_with(|id| false);
     /// assert_eq!(torque_enable[&20], false);
     /// ```
-    pub fn or_insert_with<F: FnOnce(&K) -> V>(self, default: F) -> &'a mut V {
+    pub fn or_insert_with<F: FnOnce(&K) -> V>(self, default: F) -> V {
         let k = *self.key();
 
         match self {
@@ -286,7 +256,7 @@ where
             Entry::Vacant(entry) => entry.insert(default(&k)),
         }
     }
-    /// Tries inserting a value in the entry (if empty) with the default function and returns a [Result] of the mutable reference to the value in the entry or the error encounter by the default function.
+    /// Tries inserting a value in the entry (if empty) with the default function and returns a [Result] of the value in the entry or the error encounter by the default function.
     ///
     /// Examples
     /// ```
@@ -321,7 +291,7 @@ where
     ///
     /// let res = torque_enable.entry(5).or_try_insert_with(enable_torque);
     /// assert!(res.is_ok());
-    /// assert_eq!(*res.unwrap(), true);
+    /// assert_eq!(res.unwrap(), true);
     ///
     /// let res = torque_enable.entry(20).or_try_insert_with(enable_torque);
     /// assert!(res.is_err());
@@ -330,7 +300,7 @@ where
     pub fn or_try_insert_with<F: FnOnce(&K) -> Result<V, Box<dyn Error>>>(
         self,
         default: F,
-    ) -> Result<&'a mut V, Box<dyn Error>> {
+    ) -> Result<V, Box<dyn Error>> {
         let k = *self.key();
 
         match self {
@@ -360,9 +330,9 @@ where
 }
 
 /// A view into an occupied entry in a [Cache]. It is part of the [Entry] enum.
-pub struct OccupiedEntry<'a, K: 'a, V: 'a> {
+pub struct OccupiedEntry<K, V> {
     k: K,
-    v: &'a mut V,
+    v: V,
 }
 
 /// A view into a vacant entry in a [Cache]. It is part of the [Entry] enum.
@@ -374,10 +344,11 @@ pub struct VacantEntry<'a, K, V> {
 impl<'a, K, V> VacantEntry<'a, K, V>
 where
     K: Hash + Eq + Clone,
+    V: Clone + Copy,
 {
-    fn insert(self, v: V) -> &'a mut V {
+    fn insert(self, v: V) -> V {
         self.cache.insert(self.k.clone(), v);
-        self.cache.get_mut(&self.k).unwrap()
+        *self.cache.get(&self.k).unwrap()
     }
 }
 
@@ -391,7 +362,7 @@ where
     K: Hash + Eq + Copy,
     V: Clone + Copy,
 {
-    /// Ensures a value is in the entries by inserting the default if empty, and returns a reference to the value in the entries.
+    /// Ensures a value is in the entries by inserting the default if empty, and returns the value in the entries.
     ///
     /// Examples
     /// ```
@@ -431,7 +402,7 @@ where
         //     .map(|k| self.cache.get(k).unwrap())
         //     .collect()
     }
-    /// Ensures a value is in the entries by inserting the result of the default function if empty, and returns a reference to the value in the entries.
+    /// Ensures a value is in the entries by inserting the result of the default function if empty, and returns the value in the entries.
     ///
     /// In contrary to [HashMap] API, the default function takes the missing keys as argument. As shown in the example, it makes the IO call simpler. It does require the key to implement the Copy trait though.
     ///
@@ -454,7 +425,7 @@ where
         self.or_try_insert_with(|missing| Ok(default(missing)))
             .unwrap()
     }
-    /// Tries inserting a value in the entries (if empty) with the default function and returns a [Result] of the  reference to the value in the entries or the error encounter by the default function.
+    /// Tries inserting a value in the entries (if empty) with the default function and returns a [Result] of the value in the entries or the error encounter by the default function.
     ///
     /// Examples
     /// ```
