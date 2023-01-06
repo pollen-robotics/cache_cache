@@ -132,7 +132,7 @@ where
     ///     .or_try_insert_with(get_position);
     ///
     /// assert!(pos.is_ok());
-    /// assert_eq!(pos.unwrap(), vec![&0.0, &110.0, &120.0]);
+    /// assert_eq!(pos.unwrap(), vec![0.0, 110.0, 120.0]);
     /// ```
     pub fn entries<'a>(&'a mut self, keys: &'a [K]) -> Entries<'_, K, V> {
         Entries { keys, cache: self }
@@ -389,7 +389,7 @@ pub struct Entries<'a, K: 'a, V: 'a> {
 impl<'a, K, V> Entries<'a, K, V>
 where
     K: Hash + Eq + Copy,
-    V: Clone,
+    V: Clone + Copy,
 {
     /// Ensures a value is in the entries by inserting the default if empty, and returns a reference to the value in the entries.
     ///
@@ -405,12 +405,31 @@ where
     /// assert_eq!(target_positions[&10], 0);
     /// assert_eq!(target_positions[&11], 90);
     /// assert_eq!(target_positions[&12], 0);
-    pub fn or_insert(self, default: V) -> Vec<&'a V> {
+    pub fn or_insert(self, default: V) -> Vec<V> {
+        let mut values = Vec::new();
+
         for &k in self.keys {
-            self.cache.entry(k).or_insert(default.clone());
+            match self.cache.get(&k) {
+                Some(v) => {
+                    values.push(*v);
+                }
+                None => {
+                    self.cache.insert(k, default);
+                    values.push(default);
+                }
+            }
         }
 
-        self.get_values_unchecked()
+        values
+
+        // for &k in self.keys {
+        //     self.cache.entry(k).or_insert(default.clone());
+        // }
+
+        // self.keys
+        //     .iter()
+        //     .map(|k| self.cache.get(k).unwrap())
+        //     .collect()
     }
     /// Ensures a value is in the entries by inserting the result of the default function if empty, and returns a reference to the value in the entries.
     ///
@@ -429,9 +448,9 @@ where
     ///     .entries(&[10, 11, 12])
     ///     .or_insert_with(|ids| ids.iter().map(|&id| id as f64 * 10.0).collect());
     ///
-    /// assert_eq!(pos, vec![&0.0, &110.0, &120.0]);
+    /// assert_eq!(pos, vec![0.0, 110.0, 120.0]);
     /// ```
-    pub fn or_insert_with<F: FnOnce(&[K]) -> Vec<V>>(self, default: F) -> Vec<&'a V> {
+    pub fn or_insert_with<F: FnOnce(&[K]) -> Vec<V>>(self, default: F) -> Vec<V> {
         self.or_try_insert_with(|missing| Ok(default(missing)))
             .unwrap()
     }
@@ -457,36 +476,37 @@ where
     ///     .or_try_insert_with(get_position);
     ///
     /// assert!(pos.is_ok());
-    /// assert_eq!(pos.unwrap(), vec![&0.0, &110.0, &120.0]);
+    /// assert_eq!(pos.unwrap(), vec![0.0, 110.0, 120.0]);
     /// ```
     pub fn or_try_insert_with<F: FnOnce(&[K]) -> Result<Vec<V>, Box<dyn Error>>>(
         self,
         default: F,
-    ) -> Result<Vec<&'a V>, Box<dyn Error>> {
-        let missing: Vec<K> = self
-            .keys
-            .iter()
-            .filter(|k| self.cache.get(k).is_none())
-            .copied()
-            .collect();
+    ) -> Result<Vec<V>, Box<dyn Error>> {
+        let mut values = HashMap::new();
+        let mut missing = Vec::new();
 
-        if !missing.is_empty() {
-            let values = default(&missing)?;
-
-            assert_eq!(missing.len(), values.len());
-
-            for (k, v) in missing.iter().zip(values) {
-                self.cache.insert(*k, v);
+        for k in self.keys {
+            match self.cache.get(k) {
+                Some(&v) => {
+                    values.insert(k, v);
+                }
+                None => {
+                    missing.push(*k);
+                }
             }
         }
 
-        Ok(self.get_values_unchecked())
-    }
+        if !missing.is_empty() {
+            let missing_values = default(&missing)?;
 
-    fn get_values_unchecked(self) -> Vec<&'a V> {
-        self.keys
-            .iter()
-            .map(|k| self.cache.get(k).unwrap())
-            .collect()
+            assert_eq!(missing.len(), missing_values.len());
+
+            for (k, v) in missing.iter().zip(missing_values) {
+                self.cache.insert(*k, v);
+                values.insert(k, v);
+            }
+        }
+
+        Ok(self.keys.iter().map(|k| values[k]).collect())
     }
 }
