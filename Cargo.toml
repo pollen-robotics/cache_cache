@@ -1,8 +1,14 @@
 [package]
 name = "cache_cache"
 version = "0.1.0"
+authors = ["Pollen Robotics"]
 edition = "2021"
-
+description = "Cache for controlling and reducing IO calls"
+license = "Apache-2.0"
+homepage = "https://pollen-robotics.com/"
+repository = "https://github.com/pollen-robotics/cache_cache/"
+keywords = ["caching", "expiry", "timed"]
+categories = ["caching", "hardware-support", "science::robotics"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
