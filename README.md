@@ -1,5 +1,13 @@
 # Cache for controlling and reducing IO calls
 
+[![Build Status]][actions] [![Latest Version]][crates.io]
+
+[Build Status]: https://img.shields.io/github/actions/workflow/status/pollen-robotics/cache_cache/rust.yml?branch=master
+[actions]: https://github.com/pollen-robotics/cache_cache/actions?query=branch%3Amaster
+
+[Latest Version]: https://img.shields.io/crates/v/cache_cache.svg
+[crates.io]: https://crates.io/crates/cache_cache
+
 ## Overview 
 
 This caching library has been designed for specific use-cases where:
