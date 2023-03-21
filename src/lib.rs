@@ -12,7 +12,7 @@ use std::{
     error::Error,
     hash::Hash,
     ops::Index,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant},
 };
 
 /// Cache implementation with a focus on expiry duration and reducing IO calls.
@@ -40,7 +40,7 @@ use std::{
 /// ```
 
 pub struct Cache<K, V> {
-    hash_map: HashMap<K, (V, SystemTime)>,
+    hash_map: HashMap<K, (V, Instant)>,
     expiry_duration: Option<Duration>,
 }
 
@@ -137,9 +137,9 @@ where
         Entries { keys, cache: self }
     }
 
-    fn has_expired(expiry_duration: Option<Duration>, t: &SystemTime) -> bool {
+    fn has_expired(expiry_duration: Option<Duration>, t: &Instant) -> bool {
         match expiry_duration {
-            Some(expiry) => t.elapsed().unwrap() > expiry,
+            Some(expiry) => t.elapsed() > expiry,
             None => false,
         }
     }
@@ -182,7 +182,7 @@ where
     /// assert_eq!(cache[&10], "b");
     /// ```
     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
-        self.hash_map.insert(k, (v, SystemTime::now())).map(|v| v.0)
+        self.hash_map.insert(k, (v, Instant::now())).map(|v| v.0)
     }
 }
 
