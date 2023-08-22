@@ -39,6 +39,7 @@ use std::{
 /// assert_eq!(c.get(&"present_temperature"), None);
 /// ```
 
+#[derive(Debug)]
 pub struct Cache<K, V> {
     hash_map: HashMap<K, (V, Instant)>,
     expiry_duration: Option<Duration>,
@@ -204,6 +205,7 @@ where
     }
 }
 
+#[derive(Debug)]
 /// A view into a single entry in a cache, which may either be vacant or occupied.
 ///
 /// This enum is constructed from the entry method on [Cache].
@@ -329,12 +331,14 @@ where
     }
 }
 
+#[derive(Debug)]
 /// A view into an occupied entry in a [Cache]. It is part of the [Entry] enum.
 pub struct OccupiedEntry<K, V> {
     k: K,
     v: V,
 }
 
+#[derive(Debug)]
 /// A view into a vacant entry in a [Cache]. It is part of the [Entry] enum.
 pub struct VacantEntry<'a, K, V> {
     k: K,
@@ -352,6 +356,7 @@ where
     }
 }
 
+#[derive(Debug)]
 /// A view into multiple [Entry] in a cache.
 pub struct Entries<'a, K: 'a, V: 'a> {
     keys: &'a [K],
