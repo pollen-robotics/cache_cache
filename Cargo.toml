@@ -1,6 +1,6 @@
 [package]
 name = "cache_cache"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Pollen Robotics"]
 edition = "2021"
 description = "Cache for controlling and reducing IO calls"
